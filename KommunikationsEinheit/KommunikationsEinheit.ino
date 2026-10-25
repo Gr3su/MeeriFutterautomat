@@ -1,13 +1,3 @@
-#include <GxEPD2.h>
-#include <GxEPD2_3C.h>
-#include <GxEPD2_4C.h>
-#include <GxEPD2_7C.h>
-#include <GxEPD2_BW.h>
-#include <GxEPD2_BW_SHM.h>
-#include <GxEPD2_EPD.h>
-#include <GxEPD2_EPD_friends.h>
-#include <GxEPD2_GFX.h>
-
 #include <ESP8266WiFi.h>
 #include <espnow.h>
 
@@ -37,6 +27,8 @@ typedef struct struct_message {
 } struct_message;
 
 struct_message message;
+
+String receivedMessage;
 
 void showErrorCode(uint8_t code){
   uint8_t tmpCode = code;
@@ -84,15 +76,15 @@ void setup() {
 
 void loop() {
   while (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
+    receivedMessage = Serial.readStringUntil('\n');
     
-    if(command.equals("pingESP")){
+    if(receivedMessage.equals("pingESP")){
       Serial.write("pongESP");
     }
     else{
       Serial.print("You sent: ");
       Serial.println(receivedMessage);
-      
+      delay(5000);
 
       int first = receivedMessage.indexOf(",");
       int second = receivedMessage.indexOf(",", first + 1);
@@ -100,14 +92,12 @@ void loop() {
       message.cmdIndex = receivedMessage.substring(0, first).toInt();
       message.cmdValue = receivedMessage.substring(first+1, second).toInt();
       message.cmdType = receivedMessage.substring(second+1).toInt();
-      Serial.print("You sent: ");
-      Serial.print(message.cmdIndex);
-      Serial.print(message.cmdValue);
-      Serial.print(message.cmdType);
-      receivedMessage = "";
+      
 
       esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
     }
+
+    receivedMessage = "";
   }
 
 }
