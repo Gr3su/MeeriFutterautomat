@@ -1,6 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <espnow.h>
-int test = 0;
+
 // ### Steuerung ###
 const uint8_t TYPE_TEST = 1;
 const uint8_t TYPE_ROTATE = 2;
@@ -8,6 +8,9 @@ const uint8_t TYPE_HOME = 3;
 const uint8_t TYPE_HOME_ALL = 4;
 const uint8_t TYPE_RESET = 5;
 const uint8_t TYPE_RESET_ALL = 6;
+const uint8_t TYPE_CHANGE_SETTING = 7;
+
+const uint8_t SETTING_DELAYTIME = 1;
 
 const uint8_t STATE_RECEIVED = 1;
 const uint8_t STATE_DISABLED = 2;
@@ -52,12 +55,7 @@ int16_t alphas[] = {0, 0, 0};
 */
 
 void OnDataSent(uint8_t *mac_addr, uint8_t sendStatus) {
-  Serial.print("Last Packet Send Status: ");
-  if (sendStatus == 0){
-    Serial.println("Delivery success");
-  }
-  else{
-    Serial.println("Delivery fail");
+  if (sendStatus != 0){
     showErrorCode(ERROR_SENDING);
   }
 }
@@ -66,12 +64,6 @@ void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
   if(messageReceived) return;
 
   memcpy(&message, incomingData, sizeof(message));
-  Serial.println("Data received");
-  Serial.print("cmdId: ");    Serial.println(message.cmdId);
-  Serial.print("cmdType: ");  Serial.println(message.cmdType);
-  Serial.print("cmdIndex: "); Serial.println(message.cmdIndex);
-  Serial.print("cmdValue: "); Serial.println(message.cmdValue);
-  Serial.print("cmdState: "); Serial.println(message.cmdState);
   messageReceived = true;
   
 }
@@ -92,6 +84,7 @@ void processMessage(){
   }
 
   message.cmdState = STATE_DONE;
+  
   switch(message.cmdType){
     case TYPE_TEST:
       break;
@@ -110,6 +103,10 @@ void processMessage(){
     case TYPE_RESET_ALL:
       resetAll();
       break;
+    case TYPE_CHANGE_SETTING:
+      changeSetting(message.cmdIndex, message.cmdValue);
+      break;
+
     default:
       message.cmdState = STATE_ERROR;
   }
@@ -127,6 +124,18 @@ void showErrorCode(uint8_t code){
       delay(1000);
     }
     tmpCode = code;
+    delay(2000);
+  }
+}
+
+void changeSetting(uint8_t setting, int16_t value){
+  switch(setting){
+    case SETTING_DELAYTIME:
+      if(value < 0){
+        message.cmdState = STATE_ERROR;
+        return;
+      }
+      delayTime = value;
   }
 }
 
@@ -141,7 +150,7 @@ void setup() {
   }
   pinMode(ENABLED_PIN, INPUT);
 
-  Serial.begin(115200);
+  Serial.begin(9600);
   WiFi.mode(WIFI_STA);
 
   if (esp_now_init() != 0) {
@@ -160,12 +169,6 @@ void setup() {
 }
 
 void loop() {
-  int test2 = digitalRead(ENABLED_PIN);
-  if( test2 != test){
-    test = test2;
-    Serial.println(test);
-  }
-
   if(messageReceived){
     processMessage();
     messageReceived = false;

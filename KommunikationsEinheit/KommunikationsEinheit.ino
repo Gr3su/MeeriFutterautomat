@@ -1,5 +1,9 @@
 #include <ESP8266WiFi.h>
 #include <espnow.h>
+#include <string>
+using namespace std;
+
+#define LED_PIN 2
 
 const uint8_t TYPE_TEST = 1;
 const uint8_t TYPE_ROTATE = 2;
@@ -7,6 +11,7 @@ const uint8_t TYPE_HOME = 3;
 const uint8_t TYPE_HOME_ALL = 4;
 const uint8_t TYPE_RESET = 5;
 const uint8_t TYPE_RESET_ALL = 6;
+const uint8_t TYPE_CHANGE_SETTING = 7;
 
 const uint8_t STATE_RECEIVED = 1;
 const uint8_t STATE_DISABLED = 2;
@@ -35,22 +40,21 @@ void showErrorCode(uint8_t code){
 
   for(int i = 0; i < 5; i++){
     for(int j = 0; j < 8; j++){
-      digitalWrite(2, (tmpCode & 1) ? HIGH : LOW);
+      digitalWrite(LED_PIN, (tmpCode & 1) ? HIGH : LOW);
       tmpCode >>= 1;
       delay(1000);
     }
     tmpCode = code;
+    delay(2000);
   }
 }
 
 void OnDataRecv(uint8_t * mac, uint8_t *incomingData, uint8_t len) {
   memcpy(&message, incomingData, sizeof(message));
-  Serial.println("Data received");
-  Serial.print("cmdId: ");    Serial.println(message.cmdId);
-  Serial.print("cmdType: ");  Serial.println(message.cmdType);
-  Serial.print("cmdIndex: "); Serial.println(message.cmdIndex);
-  Serial.print("cmdValue: "); Serial.println(message.cmdValue);
-  Serial.print("cmdState: "); Serial.println(message.cmdState);
+  char buffer[64]; 
+
+  snprintf(buffer, sizeof(buffer), "%d, %d, %d, %d, %d\n", message.cmdId, message.cmdType, message.cmdIndex, message.cmdValue, message.cmdState);
+  Serial.write(buffer);
 }
 
 
@@ -59,7 +63,6 @@ void setup() {
   WiFi.mode(WIFI_STA);
 
   if (esp_now_init() != 0) {
-    Serial.println("Error initializing ESP-NOW");
     showErrorCode(ERROR_ESP_INIT);
     return;
   }
@@ -72,6 +75,7 @@ void setup() {
 
   esp_now_register_recv_cb(OnDataRecv);
 
+  digitalWrite(LED_PIN, HIGH);
 }
 
 void loop() {
@@ -82,17 +86,16 @@ void loop() {
       Serial.write("pongESP");
     }
     else{
-      Serial.print("You sent: ");
-      Serial.println(receivedMessage);
-      delay(5000);
+      uint8_t first = receivedMessage.indexOf(",");
+      uint8_t second = receivedMessage.indexOf(",", first + 1);
+      uint8_t third = receivedMessage.indexOf(",", second + 1);
+      uint8_t fourth = receivedMessage.indexOf(",", third + 1);
 
-      int first = receivedMessage.indexOf(",");
-      int second = receivedMessage.indexOf(",", first + 1);
-
-      message.cmdIndex = receivedMessage.substring(0, first).toInt();
-      message.cmdValue = receivedMessage.substring(first+1, second).toInt();
-      message.cmdType = receivedMessage.substring(second+1).toInt();
-      
+      message.cmdId = receivedMessage.substring(0, first).toInt();
+      message.cmdType = receivedMessage.substring(first+1, second).toInt();
+      message.cmdIndex = receivedMessage.substring(second + 1, third).toInt();
+      message.cmdValue = receivedMessage.substring(third + 1, fourth).toInt();
+      message.cmdState = receivedMessage.substring(fourth).toInt();
 
       esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
     }
