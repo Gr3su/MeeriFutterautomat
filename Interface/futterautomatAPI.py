@@ -1,5 +1,6 @@
 import serialUtils
 from flask import Flask
+from waitress import serve
 import time
 import serial
 
@@ -108,4 +109,5 @@ def change_setting(id, index, value):
     return communicateWithESP(command, id)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    #app.run(debug=True)
+    serve(app, host='0.0.0.0', port=5000, threads=1)
