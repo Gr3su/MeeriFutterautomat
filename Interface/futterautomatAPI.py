@@ -1,5 +1,5 @@
 import serialUtils
-from flask import Flask
+from flask import Flask, jsonify
 from waitress import serve
 import time
 import serial
@@ -21,6 +21,9 @@ def checkParameters(id, index = None, steps = None):
         return False
     return True
 
+def wrongParametersResponse(id):
+    return jsonify({"id" : id, "message" : "Error: Invalid parameters", "state" : 4}, status=400, mimetype='application/json')
+
 def serialRead(ser):
     response = ser.readline().decode('utf-8').strip()
     if not response:
@@ -32,7 +35,7 @@ def communicateWithESP(command, id):
 
     try:
         if not ser or not ser.is_open:
-            return f"{id}, 0, 0, Error: No serial connection, 4", 500
+            return jsonify({"id" : id, "message" : "Error: No serial connection", "state" : 4}, status=500, mimetype='application/json')
         
         ser.write(command.encode('utf-8'))
         response = serialRead(ser)
@@ -42,28 +45,41 @@ def communicateWithESP(command, id):
         if responseId != str(id) or responseState != '1':
             if 'ser' in locals() and ser.is_open:
                 ser.close()
-            return f"{id}, 0, 0, Error: Remote ESP did not acknowledge command, 4", 500
+            return jsonify({"id" : id, "message" : "Error: Remote ESP did not acknowledge command", "state" : 4}, status=500, mimetype='application/json')
 
         ser.timeout = 180
         response = serialRead(ser)
         responseState = response.split(',')[4].strip()
         ser.timeout = 1
-        return response, 200 if responseState == '3' else 500
+
+        response = {"id" : id, "state" : responseState}
+        if responseState != '3':
+            response["message"] = "Error: Remote ESP did not complete command successfully"
+            
+        return jsonify(response, status=200 if responseState == '3' else 500, mimetype='application/json')
 
     except Exception as e:
         if 'ser' in locals() and ser.is_open:
             ser.close()
-        return f"{id}, 0, 0, Error communicating with ESP: {e}, 4", 500
+        return jsonify({"id" : id, "message" : "Error: Problem while communicating with ESP", "state" : 4}, status=500, mimetype='application/json')
     
     finally:
         ser.timeout = 1
 
 app = Flask(__name__)
 
+@app.route('/rotate/<int:id>', methods=['POST'])
+def test(id):
+    if not checkParameters(id):
+        return wrongParametersResponse(id)
+    
+    command = f"{id},1,0,0,0\n"
+    return communicateWithESP(command, id)
+
 @app.route('/rotate/<int:id>/<int:index>/<int:steps>', methods=['POST'])
 def rotate(id, index, steps):
     if not checkParameters(id, index, steps):
-        return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+        return wrongParametersResponse(id)
     
     command = f"{id},2,{index},{steps},0\n"
     return communicateWithESP(command, id)
@@ -71,7 +87,7 @@ def rotate(id, index, steps):
 @app.route('/home/<int:id>/<int:index>', methods=['POST'])
 def home(id, index):
     if not checkParameters(id, index):
-        return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+        return wrongParametersResponse(id)
 
     command = f"{id},3,{index},0,0\n"
     return communicateWithESP(command, id)
@@ -79,7 +95,7 @@ def home(id, index):
 @app.route('/home_all/<int:id>', methods=['POST'])
 def home_all(id):
     if not checkParameters(id):
-            return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+            return wrongParametersResponse(id)
 
     command = f"{id},4,0,0,0\n"
     return communicateWithESP(command, id)
@@ -87,7 +103,7 @@ def home_all(id):
 @app.route('/reset/<int:id>/<int:index>', methods=['POST'])
 def reset(id, index):
     if not checkParameters(id, index):
-        return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+        return wrongParametersResponse(id)
 
     command = f"{id},5,{index},0,0\n"
     return communicateWithESP(command, id)
@@ -95,7 +111,7 @@ def reset(id, index):
 @app.route('/reset_all/<int:id>', methods=['POST'])
 def reset_all(id):
     if not checkParameters(id):
-        return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+        return wrongParametersResponse(id)
 
     command = f"{id},6,0,0,0\n"
     return communicateWithESP(command, id)
@@ -103,7 +119,7 @@ def reset_all(id):
 @app.route('/change_setting/<int:id>/<int:index>/<int:value>', methods=['POST'])
 def change_setting(id, index, value):
     if not checkParameters(id, index):
-        return f"{id}, 0, 0, Error: Invalid parameters, 4", 400
+        return wrongParametersResponse(id)
 
     command = f"{id},7,{index},{value},0\n"
     return communicateWithESP(command, id)
